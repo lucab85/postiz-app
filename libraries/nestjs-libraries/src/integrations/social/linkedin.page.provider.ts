@@ -26,9 +26,6 @@ export class LinkedinPageProvider
   override refreshWait = true;
   override maxConcurrentJob = 2; // LinkedIn Page has professional posting limits
   override scopes = [
-    'openid',
-    'profile',
-    'w_member_social',
     'r_basicprofile',
     'rw_organization_admin',
     'w_organization_social',
@@ -53,13 +50,18 @@ export class LinkedinPageProvider
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token,
-          client_id: process.env.LINKEDIN_CLIENT_ID!,
-          client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
+          client_id: process.env.LINKEDIN_PAGE_CLIENT_ID!,
+          client_secret: process.env.LINKEDIN_PAGE_CLIENT_SECRET!,
         }),
       })
     ).json();
 
-    const { vanityName } = await (
+    const {
+      id,
+      localizedFirstName,
+      localizedLastName,
+      vanityName,
+    } = await (
       await fetch('https://api.linkedin.com/v2/me', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -67,26 +69,17 @@ export class LinkedinPageProvider
       })
     ).json();
 
-    const {
-      name,
-      sub: id,
-      picture,
-    } = await (
-      await fetch('https://api.linkedin.com/v2/userinfo', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
     return {
-      id,
+      id: String(id),
       accessToken,
       refreshToken,
       expiresIn: expires_in,
-      name,
-      picture,
-      username: vanityName,
+      name:
+        [localizedFirstName, localizedLastName].filter(Boolean).join(' ') ||
+        vanityName ||
+        String(id),
+      picture: '',
+      username: vanityName || '',
     };
   }
 
@@ -123,8 +116,8 @@ export class LinkedinPageProvider
   override async generateAuthUrl() {
     const state = makeSecureId(6);
     const codeVerifier = makeSecureId(30);
-    const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&prompt=none&client_id=${
-      process.env.LINKEDIN_CLIENT_ID
+    const url = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${
+      process.env.LINKEDIN_PAGE_CLIENT_ID
     }&redirect_uri=${encodeURIComponent(
       `${process.env.FRONTEND_URL}/integrations/social/linkedin-page`
     )}&state=${state}&scope=${encodeURIComponent(this.scopes.join(' '))}`;
@@ -219,8 +212,8 @@ export class LinkedinPageProvider
       'redirect_uri',
       `${process.env.FRONTEND_URL}/integrations/social/linkedin-page`
     );
-    body.append('client_id', process.env.LINKEDIN_CLIENT_ID!);
-    body.append('client_secret', process.env.LINKEDIN_CLIENT_SECRET!);
+    body.append('client_id', process.env.LINKEDIN_PAGE_CLIENT_ID!);
+    body.append('client_secret', process.env.LINKEDIN_PAGE_CLIENT_SECRET!);
 
     const {
       access_token: accessToken,
@@ -240,18 +233,11 @@ export class LinkedinPageProvider
     this.checkScopes(this.scopes, scope);
 
     const {
-      name,
-      sub: id,
-      picture,
+      id,
+      localizedFirstName,
+      localizedLastName,
+      vanityName,
     } = await (
-      await fetch('https://api.linkedin.com/v2/userinfo', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
-    const { vanityName } = await (
       await fetch('https://api.linkedin.com/v2/me', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -259,16 +245,21 @@ export class LinkedinPageProvider
       })
     ).json();
 
+    const name =
+      [localizedFirstName, localizedLastName].filter(Boolean).join(' ') ||
+      vanityName ||
+      String(id);
+
     return {
       // namespaced placeholder so the in-between row never collides with the
-      // personal LinkedIn channel row (same org + same member sub)
+      // personal LinkedIn channel row (same org + same member id)
       id: `${this.identifier}_${id}`,
       accessToken,
       refreshToken,
       expiresIn,
       name,
-      picture,
-      username: vanityName,
+      picture: '',
+      username: vanityName || '',
     };
   }
 
